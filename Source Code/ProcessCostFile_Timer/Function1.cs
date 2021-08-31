@@ -90,8 +90,8 @@ namespace ProcessCostFile_Timer
             DateTime filemodified;
             DateTime filemodifiedold = Convert.ToDateTime("1900/01/01");
 
-            //try
-            //{
+            try
+            {
                 DataLakeDirectoryClient directoryClient = filesystem.GetDirectoryClient(DirectoryName);
 
                 foreach (PathItem pathItem in directoryClient.GetPaths(false, false))
@@ -200,11 +200,11 @@ namespace ProcessCostFile_Timer
                         }
                     }
                 }
-            //}
-            //catch
-            //{
+            }
+            catch
+            {
 
-            //}
+            }
         }
     }
 }
