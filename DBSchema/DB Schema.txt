@@ -1,0 +1,1 @@
+create table ServiceUsage (newdate date,serviceFamily varchar(100),consumedService varchar(100), meterCategory varchar(100), meterSubCategory varchar(100), subscriptionName varchar(100), resourceGroupName varchar(100), location varchar(30), effectivePrice float, quantity float, billingCurrency varchar(10))
