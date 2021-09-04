@@ -40,24 +40,73 @@ namespace ProcessCostFile_Timer
 
             string connectionString = @"Server =tcp:" + dbservername + ",1433;Initial Catalog=" + dbname + ";Persist Security Info=False;User ID=" + dbusername + ";Password=" + dbpassword + ";";
 
-            int CurrMaxDateNum = DateTime.DaysInMonth(DateTime.Now.Year, DateTime.Now.Month);
-            int CurrYear = DateTime.Now.Year;
-            string CurrMonth = ("00" + (DateTime.Now.Month).ToString());
-            CurrMonth = CurrMonth.Substring(CurrMonth.Length - 2, 2);
+            int CurrMaxDateNum = 0;
+            int CurrYear = 0;
+            string CurrMonth = "";
+            int CurrDay = DateTime.Now.Day;
+
+            // Load the previous month data
+            if (_configuration["IsPrevMonthDataLoad"] == "1")
+            {
+                CurrDay = 1;
+            }
+            log.LogInformation("isprevdataload - " + _configuration["IsPrevMonthDataLoad"] + " ; FullLoad - " + _configuration["IsFullLoad"]);
+            // Get the previous month folder if current date is 1st
+            if (CurrDay == 1)
+            {
+                // Get the previous month folder if current month is January
+                // the month would be December and previous year
+                if (DateTime.Now.Month == 1)
+                {
+                    CurrYear = DateTime.Now.Year - 1;
+                    CurrMonth = "12";
+                    CurrMaxDateNum = 31;
+                }
+                else
+                {
+                    // Get the previous month folder of current year
+                    CurrYear = DateTime.Now.Year;
+                    CurrMonth = ("00" + ((DateTime.Now.AddMonths(-1)).Month).ToString());
+                    CurrMonth = CurrMonth.Substring(CurrMonth.Length - 2, 2);
+                    CurrMaxDateNum = DateTime.DaysInMonth(DateTime.Now.Year, (DateTime.Now.AddMonths(-1)).Month);
+                }
+            }
+            else
+            {
+                // Get the current month folder of current year
+                CurrYear = DateTime.Now.Year;
+                CurrMonth = ("00" + (DateTime.Now.Month).ToString());
+                CurrMonth = CurrMonth.Substring(CurrMonth.Length - 2, 2);
+                CurrMaxDateNum = DateTime.DaysInMonth(DateTime.Now.Year, DateTime.Now.Month);
+            }
+
             string IsFullLoad = _configuration["IsFullLoad"];
             string FileSystemName = _configuration["FileSystemName"];
             string ParentDirectory = _configuration["ParentDirectoryName"];
             string ChildrenDirectories = _configuration["ChildrenDirectoryNames"];
             string[] Directories = ChildrenDirectories.Split(',');
-
             string StartDate = CurrYear.ToString() + CurrMonth + "01";
             string EndDate = CurrYear.ToString() + CurrMonth + CurrMaxDateNum.ToString();
             string DatePeriod = StartDate + "-" + EndDate;
 
-            string currDate = (DateTime.Now).AddDays(-2).ToString("yyyy/MM/dd");
-            currDate = currDate.Replace("-", "/");
-
             string DirectoryName = "";
+
+            // process data for last 2 days to reduce the data load
+            string currDate = (DateTime.Now).AddDays(-6).ToString("yyyy/MM/dd");
+
+            // Do full load if the date difference is previous month
+            if ((Convert.ToDateTime(currDate)).Month.ToString() != DateTime.Now.Month.ToString())
+            {
+                IsFullLoad = "1";
+            }
+
+            // Load the previous month data
+            if (_configuration["IsPrevMonthDataLoad"] == "1")
+            {
+                currDate = CurrYear + "/" + CurrMonth + "/" + (CurrMaxDateNum - 6).ToString();
+            }
+
+            currDate = currDate.Replace("-", "/");
 
             foreach (string dir in Directories)
             {
@@ -67,6 +116,7 @@ namespace ProcessCostFile_Timer
                 DataLakeFileSystemClient filesystem = client.GetFileSystemClient(FileSystemName);
 
                 ProcessLogData(filesystem, DirectoryName, IsFullLoad, currDate, connectionString, dbTableName);
+                log.LogInformation("filesystem - " + filesystem + " ; DirectoryName - " + DirectoryName + " ; CurrDate - " + currDate);
             }
 
             log.LogInformation($"C# Timer trigger function executed at: {DateTime.Now}");
@@ -90,8 +140,8 @@ namespace ProcessCostFile_Timer
             DateTime filemodified;
             DateTime filemodifiedold = Convert.ToDateTime("1900/01/01");
 
-            try
-            {
+            //try
+            //{
                 DataLakeDirectoryClient directoryClient = filesystem.GetDirectoryClient(DirectoryName);
 
                 foreach (PathItem pathItem in directoryClient.GetPaths(false, false))
@@ -174,10 +224,13 @@ namespace ProcessCostFile_Timer
 
                     if (IsFullLoad != "1")
                     {
-                        string query = @"DELETE FROM ServiceUsage WHERE newdate >= '" + currDate + "'";
 
-                        //define the SqlCommand object
-                        SqlCommand cmd = new SqlCommand(query, connection);
+                    // Get the subscription name and delete data from table
+                    string subscriptionName = dtFinal.Rows[1]["subscriptionName"].ToString();
+                    string query = @"DELETE FROM " + dbTableName + " WHERE subscriptionName = '" + subscriptionName + "' and newdate >= '" + currDate + "'";
+
+                    //define the SqlCommand object
+                    SqlCommand cmd = new SqlCommand(query, connection);
 
                         //execute the SQLCommand
                         cmd.ExecuteNonQuery();
@@ -200,11 +253,11 @@ namespace ProcessCostFile_Timer
                         }
                     }
                 }
-            }
-            catch
-            {
+            //}
+            //catch
+            //{
 
-            }
+            //}
         }
     }
 }
