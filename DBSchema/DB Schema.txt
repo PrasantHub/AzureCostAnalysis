@@ -1,1 +1,73 @@
-create table ServiceUsage (newdate date,serviceFamily varchar(100),consumedService varchar(100), meterCategory varchar(100), meterSubCategory varchar(100), subscriptionName varchar(100), resourceGroupName varchar(100), location varchar(30), effectivePrice float, quantity float, billingCurrency varchar(10))
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [logging].[AzureCostMonitoring](
+	[newdate] [date] NULL,
+	[billingAccountName] [varchar](200) NULL,
+	[partnerName] [varchar](200) NULL,
+	[resellerName] [varchar](200) NULL,
+	[resellerMpnId] [varchar](200) NULL,
+	[customerTenantId] [varchar](200) NULL,
+	[customerName] [varchar](200) NULL,
+	[costCenter] [varchar](200) NULL,
+	[billingPeriodEndDate] [varchar](200) NULL,
+	[billingPeriodStartDate] [varchar](200) NULL,
+	[servicePeriodEndDate] [datetime] NULL,
+	[servicePeriodStartDate] [datetime] NULL,
+	[serviceFamily] [varchar](200) NULL,
+	[productOrderId] [varchar](200) NULL,
+	[productOrderName] [varchar](200) NULL,
+	[consumedService] [varchar](200) NULL,
+	[meterId] [varchar](200) NULL,
+	[meterName] [varchar](200) NULL,
+	[meterCategory] [varchar](200) NULL,
+	[meterSubCategory] [varchar](200) NULL,
+	[meterRegion] [varchar](200) NULL,
+	[ProductId] [varchar](200) NULL,
+	[ProductName] [varchar](200) NULL,
+	[SubscriptionId] [varchar](200) NULL,
+	[subscriptionName] [varchar](200) NULL,
+	[publisherType] [varchar](200) NULL,
+	[publisherId] [varchar](200) NULL,
+	[publisherName] [varchar](200) NULL,
+	[resourceGroupName] [varchar](200) NULL,
+	[ResourceId] [varchar](200) NULL,
+	[resourceLocation] [varchar](200) NULL,
+	[location] [varchar](200) NULL,
+	[effectivePrice] [float] NULL,
+	[quantity] [float] NULL,
+	[unitOfMeasure] [varchar](200) NULL,
+	[chargeType] [varchar](200) NULL,
+	[billingCurrency] [varchar](200) NULL,
+	[pricingCurrency] [varchar](200) NULL,
+	[costInBillingCurrency] [varchar](200) NULL,
+	[costInUsd] [varchar](200) NULL,
+	[exchangeRatePricingToBilling] [varchar](200) NULL,
+	[exchangeRateDate] [datetime] NULL,
+	[serviceInfo1] [varchar](200) NULL,
+	[serviceInfo2] [varchar](200) NULL,
+	[additionalInfo] [varchar](200) NULL,
+	[tags] [varchar](200) NULL,
+	[PayGPrice] [varchar](200) NULL,
+	[frequency] [varchar](200) NULL,
+	[term] [varchar](200) NULL,
+	[reservationId] [varchar](200) NULL,
+	[reservationName] [varchar](200) NULL,
+	[pricingModel] [varchar](200) NULL,
+	[unitPrice] [varchar](200) NULL
+) ON [PRIMARY]
+GO
+CREATE NONCLUSTERED INDEX [idx_AzureCostMonitor_newdate] ON [logging].[AzureCostMonitoring]
+(
+	[newdate] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+GO
+CREATE NONCLUSTERED INDEX [IDX_resourceGroupName_tags] ON [logging].[AzureCostMonitoring]
+(
+	[resourceGroupName] ASC,
+	[tags] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO

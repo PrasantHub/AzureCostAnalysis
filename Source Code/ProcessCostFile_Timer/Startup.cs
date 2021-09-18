@@ -10,7 +10,8 @@ namespace ProcessCostFile_Timer
     {
         public override void ConfigureAppConfiguration(IFunctionsConfigurationBuilder builder)
         {
-            string cs = "Endpoint=https://appd-config.azconfig.io;Id=u5-l9-s0:C66Hw0Ydm/tRnXh2cjYv;Secret=i4FT8X";
+		// connection to the azure app configuration service            
+	    string cs = "Endpoint=https://<app configuration name>.azconfig.io;Id=<secret code>";
             builder.ConfigurationBuilder.AddAzureAppConfiguration(cs);
         }
 

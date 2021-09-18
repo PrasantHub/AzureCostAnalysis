@@ -14,9 +14,6 @@ using Microsoft.Extensions.Configuration;
 
 namespace ProcessCostFile_Timer
 {
-
-
-
     public class ProcessCostFile
     {
         private readonly IConfiguration _configuration;
@@ -46,11 +43,13 @@ namespace ProcessCostFile_Timer
             int CurrDay = DateTime.Now.Day;
 
             // Load the previous month data
+	    // In case we need to load only previous month data
             if (_configuration["IsPrevMonthDataLoad"] == "1")
             {
-                CurrDay = 1;
+                // Consider today is 1st day of the month
+		CurrDay = 1;
             }
-            log.LogInformation("isprevdataload - " + _configuration["IsPrevMonthDataLoad"] + " ; FullLoad - " + _configuration["IsFullLoad"]);
+
             // Get the previous month folder if current date is 1st
             if (CurrDay == 1)
             {
@@ -88,11 +87,10 @@ namespace ProcessCostFile_Timer
             string StartDate = CurrYear.ToString() + CurrMonth + "01";
             string EndDate = CurrYear.ToString() + CurrMonth + CurrMaxDateNum.ToString();
             string DatePeriod = StartDate + "-" + EndDate;
-
             string DirectoryName = "";
 
-            // process data for last 2 days to reduce the data load
-            string currDate = (DateTime.Now).AddDays(-6).ToString("yyyy/MM/dd");
+            // process data for last 2 days to reduce the data process
+            string currDate = (DateTime.Now).AddDays(-2).ToString("yyyy/MM/dd");
 
             // Do full load if the date difference is previous month
             if ((Convert.ToDateTime(currDate)).Month.ToString() != DateTime.Now.Month.ToString())
@@ -103,7 +101,7 @@ namespace ProcessCostFile_Timer
             // Load the previous month data
             if (_configuration["IsPrevMonthDataLoad"] == "1")
             {
-                currDate = CurrYear + "/" + CurrMonth + "/" + (CurrMaxDateNum - 6).ToString();
+                currDate = CurrYear + "/" + CurrMonth + "/" + (CurrMaxDateNum).ToString();
             }
 
             currDate = currDate.Replace("-", "/");
@@ -112,9 +110,11 @@ namespace ProcessCostFile_Timer
             {
                 DirectoryName = ParentDirectory + dir + "/" + DatePeriod;
 
-                var client = GetDataLakeServiceClient(storageName, accessToken);
+                // Get the storage client
+		var client = GetDataLakeServiceClient(storageName, accessToken);
                 DataLakeFileSystemClient filesystem = client.GetFileSystemClient(FileSystemName);
 
+		// Read the .csv file and load data to the sql database
                 ProcessLogData(filesystem, DirectoryName, IsFullLoad, currDate, connectionString, dbTableName);
                 log.LogInformation("filesystem - " + filesystem + " ; DirectoryName - " + DirectoryName + " ; CurrDate - " + currDate);
             }
@@ -140,124 +140,127 @@ namespace ProcessCostFile_Timer
             DateTime filemodified;
             DateTime filemodifiedold = Convert.ToDateTime("1900/01/01");
 
-            //try
-            //{
-                DataLakeDirectoryClient directoryClient = filesystem.GetDirectoryClient(DirectoryName);
+	    // Get the directory of the storage
+            DataLakeDirectoryClient directoryClient = filesystem.GetDirectoryClient(DirectoryName);
 
-                foreach (PathItem pathItem in directoryClient.GetPaths(false, false))
+            // Read only the latest file available in the folder
+	    foreach (PathItem pathItem in directoryClient.GetPaths(false, false))
+            {
+                filemodified = pathItem.LastModified.DateTime;
+                if (filemodified > filemodifiedold)
                 {
-                    filemodified = pathItem.LastModified.DateTime;
-                    if (filemodified > filemodifiedold)
-                    {
-                        filename = pathItem.Name;
-                        filemodifiedold = filemodified;
-                    }
+                    filename = pathItem.Name;
+                    filemodifiedold = filemodified;
                 }
-                DirectoryName = DirectoryName + "/";
-                DataLakeFileClient fileClient = directoryClient.GetFileClient(filename.Replace(DirectoryName, ""));
+            }
 
-                Stream reader = fileClient.OpenRead();
+            DirectoryName = DirectoryName + "/";
+            DataLakeFileClient fileClient = directoryClient.GetFileClient(filename.Replace(DirectoryName, ""));
 
-                DataTable dt = new DataTable();
+            Stream reader = fileClient.OpenRead();
 
-                StreamReader reader1 = new StreamReader(reader);
+            DataTable dt = new DataTable();
 
-                string[] headers = reader1.ReadLine().Split(',');
+            StreamReader streader = new StreamReader(reader);
 
-                foreach (string header in headers)
+	    // Get the column headers
+            string[] headers = streader.ReadLine().Split(',');
+
+            foreach (string header in headers)
+            {
+                dt.Columns.Add(header);
+            }
+
+	    // Read the data and add to the data table
+            while (!streader.EndOfStream)
+            {
+                string[] rows = Regex.Split(streader.ReadLine(), ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
+                DataRow dr = dt.NewRow();
+                for (int i = 0; i < headers.Length; i++)
                 {
-                    dt.Columns.Add(header);
+                    dr[i] = rows[i];
                 }
+                dt.Rows.Add(dr);
+            }
 
-                while (!reader1.EndOfStream)
-                {
-                    string[] rows = Regex.Split(reader1.ReadLine(), ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
-                    DataRow dr = dt.NewRow();
-                    for (int i = 0; i < headers.Length; i++)
-                    {
-                        dr[i] = rows[i];
-                    }
-                    dt.Rows.Add(dr);
-                }
+            // Filter the required columns to be stored in the database
+            string[] selectedColumns = new[] { "date", "billingAccountName", "partnerName", "resellerName", "resellerMpnId", "customerTenantId", "customerName", "costCenter", "billingPeriodEndDate", "billingPeriodStartDate", "servicePeriodEndDate", "servicePeriodStartDate" , "serviceFamily", "productOrderId", "productOrderName", "consumedService", "meterId", "meterName", "meterCategory", "meterSubCategory", "meterRegion", "ProductId", "ProductName", "SubscriptionId", "subscriptionName", "publisherType", "publisherId", "publisherName", "resourceGroupName", "ResourceId", "resourceLocation", "location", "effectivePrice", "quantity", "unitOfMeasure", "chargeType", "billingCurrency", "pricingCurrency", "costInBillingCurrency", "costInUsd", "exchangeRatePricingToBilling", "exchangeRateDate", "serviceInfo1", "serviceInfo2", "additionalInfo", "tags", "PayGPrice", "frequency", "term", "reservationId", "reservationName", "pricingModel", "unitPrice" };
 
-                string[] selectedColumns = new[] { "date", "serviceFamily", "consumedService", "meterCategory", "meterSubCategory", "subscriptionName", "resourceGroupName", "location", "effectivePrice", "quantity", "billingCurrency" };
+            // Create the DataView of the DataTable
+            DataView view = new DataView(dt);
+            
+	    // Create a new DataTable from the DataView with just the columns desired - and in the order desired
+            DataTable selected = new DataView(dt).ToTable(false, selectedColumns);
 
-                // Create the DataView of the DataTable
-                DataView view = new DataView(dt);
-                // Create a new DataTable from the DataView with just the columns desired - and in the order desired
-                DataTable selected = new DataView(dt).ToTable(false, selectedColumns);
+	    // Add a new date column as the csv file date is not in uniform format
+            DataColumn dc = new DataColumn();
+            dc.ColumnName = "newdate";
+            dc.DataType = typeof(DateTime);
 
-                DataColumn dc = new DataColumn();
-                dc.ColumnName = "newdate";
-                dc.DataType = typeof(DateTime);
+            selected.Columns.Add(dc);
 
-                selected.Columns.Add(dc);
+            CultureInfo cultures = new CultureInfo("en-US");
 
-                CultureInfo cultures = new CultureInfo("en-US");
+            //update the new date column value
+            foreach (DataRow row in selected.Rows)
+            {
+                filename = row["date"].ToString().Replace(" ", "");
+                filename = filename.Substring(6, 4) + "/" + filename.Substring(0, 2) + "/" + filename.Substring(3, 2);
+                row["newdate"] = Convert.ToDateTime(filename, cultures);
+            }
 
-                //update the new date column value
-                foreach (DataRow row in selected.Rows)
-                {
-                    filename = row["date"].ToString().Replace(" ", "");
-                    filename = filename.Substring(6, 4) + "/" + filename.Substring(0, 2) + "/" + filename.Substring(3, 2);
-                    row["newdate"] = Convert.ToDateTime(filename, cultures);
-                }
+            // Create a DataView
+            DataView dv = new DataView(selected);
 
-                // Create a DataView
-                DataView dv = new DataView(selected);
+            // Filter by an expression. Filter all rows where column 'Col' have values greater or equal than 3
+            if (IsFullLoad != "1")
+            {
+                dv.RowFilter = "newdate >= #" + currDate + "#";
+            }
 
-                // Filter by an expression. Filter all rows where column 'Col' have values greater or equal than 3
+	    // Select the final column list
+            selectedColumns = new[] { "newdate", "billingAccountName", "partnerName", "resellerName", "resellerMpnId", "customerTenantId", "customerName", "costCenter", "billingPeriodEndDate", "billingPeriodStartDate", "servicePeriodEndDate", "servicePeriodStartDate" /*, "date"*/, "serviceFamily", "productOrderId", "productOrderName", "consumedService", "meterId", "meterName", "meterCategory", "meterSubCategory", "meterRegion", "ProductId", "ProductName", "SubscriptionId", "subscriptionName", "publisherType", "publisherId", "publisherName", "resourceGroupName", "ResourceId", "resourceLocation", "location", "effectivePrice", "quantity", "unitOfMeasure", "chargeType", "billingCurrency", "pricingCurrency", "costInBillingCurrency", "costInUsd", "exchangeRatePricingToBilling", "exchangeRateDate", "serviceInfo1", "serviceInfo2", "additionalInfo", "tags", "PayGPrice", "frequency", "term", "reservationId", "reservationName", "pricingModel", "unitPrice" };
+
+
+            DataTable dtFinal = new DataTable();
+            dtFinal = dv.ToTable(false, selectedColumns);
+
+            using (SqlConnection connection = new SqlConnection(connectionString))
+            {
+                connection.Open();
+
                 if (IsFullLoad != "1")
                 {
-                    dv.RowFilter = "newdate >= #" + currDate + "#";
-                }
 
-                selectedColumns = new[] { "newdate", "serviceFamily", "consumedService", "meterCategory", "meterSubCategory", "subscriptionName", "resourceGroupName", "location", "effectivePrice", "quantity", "billingCurrency" };
-
-                DataTable dtFinal = new DataTable();
-                dtFinal = dv.ToTable(false, selectedColumns);
-
-                //string connectionString = @"Server =tcp:srv-dnaplatform-sqldb.database.windows.net,1433;Initial Catalog=db-dnaplatform-config;Persist Security Info=False;User ID=dnaadmin;Password=P@ssw0rd;";
-                using (SqlConnection connection = new SqlConnection(connectionString))
-                {
-                    connection.Open();
-
-                    if (IsFullLoad != "1")
-                    {
-
-                    // Get the subscription name and delete data from table
+                   // Get the subscription name and delete data from table
                     string subscriptionName = dtFinal.Rows[1]["subscriptionName"].ToString();
                     string query = @"DELETE FROM " + dbTableName + " WHERE subscriptionName = '" + subscriptionName + "' and newdate >= '" + currDate + "'";
 
                     //define the SqlCommand object
                     SqlCommand cmd = new SqlCommand(query, connection);
 
-                        //execute the SQLCommand
-                        cmd.ExecuteNonQuery();
-                    }
+                    //execute the SQLCommand
+                    cmd.ExecuteNonQuery();
+                 }
+		 
+		 // Bulk copy of the csv file data to the sql table
+                 using (SqlBulkCopy bulkCopy = new SqlBulkCopy(connection))
+                 {
+                   foreach (DataColumn c in dtFinal.Columns)
+                   bulkCopy.ColumnMappings.Add(c.ColumnName, c.ColumnName);
 
-                    using (SqlBulkCopy bulkCopy = new SqlBulkCopy(connection))
-                    {
-                        foreach (DataColumn c in dtFinal.Columns)
-                            bulkCopy.ColumnMappings.Add(c.ColumnName, c.ColumnName);
+                   bulkCopy.DestinationTableName = dbTableName;
 
-                        bulkCopy.DestinationTableName = dbTableName;
-
-                        try
-                        {
-                            bulkCopy.WriteToServer(dtFinal);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine(ex.Message);
-                        }
-                    }
+                   try
+                   {
+                       bulkCopy.WriteToServer(dtFinal);
+                   }
+                   catch (Exception ex)
+                   {
+                       Console.WriteLine(ex.Message);
+                   }
                 }
-            //}
-            //catch
-            //{
-
-            //}
+            }
         }
     }
 }
